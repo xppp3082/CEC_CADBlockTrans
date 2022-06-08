@@ -42,33 +42,7 @@ namespace CEC_CADBlockTrans
             // SETUP
             UIDocument uiDoc = uiApp.ActiveUIDocument;
             Document doc = uiDoc.Document;
-
-            #region 
-            //bool cbDocumentDataIsChecked = false;
-            //ui.Dispatcher.Invoke(() => cbDocumentDataIsChecked = ui.CbDocumentData.IsChecked.GetValueOrDefault());
-
-            //bool cbSheetDataIsChecked = false;
-            //ui.Dispatcher.Invoke(() => cbSheetDataIsChecked = ui.CbSheetData.IsChecked.GetValueOrDefault());
-
-            //bool cbWallDataIsChecked = false;
-            //ui.Dispatcher.Invoke(() => cbWallDataIsChecked = ui.CbWallData.IsChecked.GetValueOrDefault());
-
-            //// METHODS  
-            //if (cbDocumentDataIsChecked)
-            //{
-            //    Method.DocumentInfo(ui, doc);
-            //}
-
-            //if (cbSheetDataIsChecked)
-            //{
-            //    Method.SheetRename(ui, doc);
-            //}
-
-            //if (cbWallDataIsChecked)
-            //{
-            //    Method.WallInfo(ui, doc);
-            //}
-            #endregion
+            #region 舊作法，東西在execute中蒐集，微怪
             //蒐集CAD Block
             //Autodesk.Revit.DB.View activeView = doc.ActiveView;
             //Element viewLevel = activeView.GenLevel;
@@ -89,11 +63,12 @@ namespace CEC_CADBlockTrans
             //    }
             //}
             //ui.Dispatcher.Invoke(() =>ui.BlockListBox.ItemsSource = blockElement);
+            #endregion
             List<CAD> cadList = new List<CAD>();
-            int count=0;
-            foreach(CAD cad in ui.BlockListBox.Items)
+            int count = 0;
+            foreach (CAD cad in ui.BlockListBox.Items)
             {
-                if(cad.Selected == true)
+                if (cad.Selected == true)
                 {
                     count++;
                     cadList.Add(cad);
@@ -101,24 +76,73 @@ namespace CEC_CADBlockTrans
             }
             //ui.Dispatcher.Invoke(() => count = ui.BlockListBox.SelectedItems.Count);
             //MessageBox.Show($"BlockListBox 中共有 {count} 個物件被選取");
-            ui.Dispatcher.Invoke(() =>ui.pbar.Value=0);
+            ui.Dispatcher.Invoke(() => ui.pbar.Value = 0);
             ui.Dispatcher.Invoke(() => ui.pbar.Maximum = count);
-
-            ////透過dispatcher的做法，讀出UI資料
-            //for (int i = 0; i < count; i++)
-            //{
-            //    ui.Dispatcher.Invoke(() => tempInst = (CAD)ui.BlockListBox.SelectedItems[i]);
-            //    cadList.Add(tempInst);
-            //    string temp = tempInst.Name;
-            //}
             int number = 1;
+            List<ImportInstance> targetList = new List<ImportInstance>();
+
+            #region 原來作法
+            ////原來作法
+            //using (Transaction trans = new Transaction(doc))
+            //{
+            //    trans.Start("圖塊批次放置");
+            //    foreach (CAD cad in cadList)
+            //    {
+            //        ElementType elemType = doc.GetElement(cad.Id) as ElementType;
+            //        ui.Dispatcher.Invoke(() => Method.cadBlockCount(ui, doc, elemType)); //-->targetBlocks仍然為0，UI.dispatche.invoke無法賦值運算?
+            //        ui.Dispatcher.Invoke(() => Method.createFamilyInstance(ui, doc, elemType));
+            //        ui.Dispatcher.Invoke(() => ui.pbar.Value += number);
+            //    }
+            //    trans.Commit();
+            //    trans.Dispose();
+            //}
+            //ui.Activate();
+            #endregion
+
+            #region 新作法
+            //新作法嘗試，先蒐集所有的ImportInst
+            int completeNum = 0;
             foreach (CAD cad in cadList)
             {
-                ElementType elemType = doc.GetElement(cad.Id)  as ElementType;
-                ui.Dispatcher.Invoke(() =>Method.cadBlockCount(ui, doc, elemType)); //-->targetBlocks仍然為0，UI.dispatche.invoke無法賦值運算?
-                ui.Dispatcher.Invoke(() => Method.createFamilyInstance(ui, doc, elemType));
-                ui.Dispatcher.Invoke(() => ui.pbar.Value += number);
+                ElementType elemType = doc.GetElement(cad.Id) as ElementType;
+                List<ImportInstance> tempList = new importedCAD().instanceOfType(doc, elemType);
+                ui.Dispatcher.Invoke(() => Method.cadBlockCount(ui, doc, elemType));
+                if (tempList.Count() > 0)
+                {
+                    foreach (ImportInstance inst in tempList)
+                    {
+                        targetList.Add(inst);
+                    }
+                }
             }
+            ui.Dispatcher.Invoke(() => ui.pbar.Value = 0);
+            ui.Dispatcher.Invoke(() => ui.pbar.Maximum = targetList.Count);
+            using (TransactionGroup transGroup = new TransactionGroup(doc))
+            {
+                transGroup.Start("圖塊批次放置");
+                foreach (ImportInstance inst in targetList)
+                {
+                    //如果有成功創造
+                    if (Method.createInstanceByCAD(ui, doc, inst))
+                    {
+                        completeNum += 1;
+                    }
+                    #region 關於progrssbar的更新-->注意要設定DispatcherPriority為Background
+                    ui.Dispatcher.Invoke(() => ui.pbar.Value += 1, System.Windows.Threading.DispatcherPriority.Background);
+                    //ui.pbar.Dispatcher.Invoke(() => ui.pbar.Value += 1, System.Windows.Threading.DispatcherPriority.Background);
+                    #endregion
+                }
+                transGroup.Assimilate();
+            }
+            FamilySymbol selectedSymbol = ui.symbolComboBox.SelectedItem as FamilySymbol;
+            Task.Run(() =>
+            {
+                string completeMessage = $"【轉換完成】共成功將 {completeNum} 個圖塊轉換為 {selectedSymbol.FamilyName} - {selectedSymbol.Name} 元件";
+                ui.Dispatcher.Invoke(() =>
+                    ui.outputBox.Text += "\n" + completeMessage);
+            });
+            ui.Activate();
+            #endregion
         }
     }
 }

@@ -36,6 +36,7 @@ namespace CEC_CADBlockTrans
                 Document doc = uidoc.Document;
                 #region
                 this.ShowForm(commandData.Application);
+                //this.ShowFormSeparateThread(uiapp);
                 return Result.Succeeded;
                 #endregion
             }
@@ -65,34 +66,10 @@ namespace CEC_CADBlockTrans
         public void ShowFormSeparateThread(UIApplication uiapp)
         {
             // If we do not have a thread started or has been terminated start a new one
-            Document doc = uiapp.ActiveUIDocument.Document;
             if (!(_uiThread is null) && _uiThread.IsAlive) return;
             //EXTERNAL EVENTS WITH ARGUMENTS
             EventHandlerWithStringArg evStr = new EventHandlerWithStringArg();
             EventHandlerWithWpfArg evWpf = new EventHandlerWithWpfArg();
-
-            #region
-            //»`¶°CAD Block
-            Autodesk.Revit.DB.View activeView = doc.ActiveView;
-            Element viewLevel = activeView.GenLevel;
-            string output = "";
-            ElementLevelFilter levelFilter = new ElementLevelFilter(activeView.LevelId);
-            FilteredElementCollector CADcollector = new FilteredElementCollector(doc).OfClass(typeof(ImportInstance)).WhereElementIsNotElementType();
-            //MessageBox.Show(CADcollector.Count().ToString());
-            List<string> blockNameList = new List<string>();
-            List<Element> blockElement = new List<Element>();
-            foreach (ImportInstance inst in CADcollector)
-            {
-                ElementId typeId = inst.GetTypeId();
-                string tempName = doc.GetElement(typeId).Name;
-                if (!blockNameList.Contains(tempName))
-                {
-                    blockNameList.Add(tempName);
-                    blockElement.Add(doc.GetElement(typeId));
-                }
-            }
-            // The dialog becomes the owner responsible for disposing the objects given to it.
-            #endregion
 
             _uiThread = new Thread(() =>
             {
@@ -103,7 +80,6 @@ namespace CEC_CADBlockTrans
                 _mMyForm = new UI(uiapp, evStr, evWpf);
                 _mMyForm.Closed += (s, e) => Dispatcher.CurrentDispatcher.InvokeShutdown();
                 _mMyForm.Show();
-                _mMyForm.BlockListBox.ItemsSource = blockElement;
                 Dispatcher.Run();
             });
 

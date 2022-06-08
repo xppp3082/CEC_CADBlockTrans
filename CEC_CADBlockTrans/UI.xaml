@@ -47,6 +47,14 @@
         <TextBlock Grid.Column="0" HorizontalAlignment="Left" Grid.Row="0" TextWrapping="Wrap" Text="請選擇要替換的CAD圖塊：" FontSize="12" Margin="10,10,0,10" Grid.ColumnSpan="2" />
         <ListBox  x:Name="BlockListBox" Margin="10,30,10,10" ItemTemplate="{StaticResource listItemViewTemplate}" Grid.Column="0" Grid.RowSpan="5" Grid.ColumnSpan="2"/>
         <ProgressBar x:Name="pbar"  Grid.Column="0" Grid.Row="5" VerticalAlignment="Center" Height="20" Margin="10,52,10,42" Background="#FFD6D6D6" Grid.ColumnSpan="2"/>
+        <TextBlock Grid.Column="0" Grid.Row="5" Margin="10,52,10,42" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.ColumnSpan="2">
+            <TextBlock.Text>
+                <MultiBinding StringFormat="{}{0}/{1}">
+                    <Binding Path="Value" ElementName="pbar" />
+                    <Binding Path="Maximum" ElementName="pbar" />
+                </MultiBinding>
+            </TextBlock.Text>
+        </TextBlock>
         <Button x:Name="executeButton"  Content="執行" Grid.Column="4"  Grid.Row="5" Grid.ColumnSpan="2" VerticalAlignment="Center" HorizontalAlignment="Right"  Width="120" Height="30" Click="continueButtonClick" Margin="0"/>
         <Button x:Name="cancelButton" Content="取消" Grid.Column="6"  Grid.Row="5" VerticalAlignment="Center" HorizontalAlignment="Right" Width="120" Height="30" Click="cancelButtonClick"  Margin="10"/>
         <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Left" Grid.Row="1" TextWrapping="Wrap" Text="01.品類" FontSize="12"  />

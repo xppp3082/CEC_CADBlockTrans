@@ -43,7 +43,7 @@ namespace CEC_CADBlockTrans
         private void continueButtonClick(object sender, RoutedEventArgs e)
         {
             // Raise external event with this UI instance (WPF) as an argument
-            Method.DocumentInfo(this, _doc);
+            //Method.DocumentInfo(this, _doc);
             //MessageBox.Show(this.BlockListBox.SelectedItems.Count.ToString());
             //foreach(var obj in BlockListBox.SelectedItems)
             //{
