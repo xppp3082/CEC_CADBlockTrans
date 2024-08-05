@@ -40,30 +40,10 @@ namespace CEC_CADBlockTrans
         public override void Execute(UIApplication uiApp, UI ui)
         {
             // SETUP
+            Counter.count += 1;
             UIDocument uiDoc = uiApp.ActiveUIDocument;
             Document doc = uiDoc.Document;
-            #region 舊作法，東西在execute中蒐集，微怪
-            //蒐集CAD Block
-            //Autodesk.Revit.DB.View activeView = doc.ActiveView;
-            //Element viewLevel = activeView.GenLevel;
-            //string output = "";
-            //ElementLevelFilter levelFilter = new ElementLevelFilter(activeView.LevelId);
-            //FilteredElementCollector CADcollector = new FilteredElementCollector(doc).OfClass(typeof(ImportInstance)).WhereElementIsNotElementType();
-            ////MessageBox.Show(CADcollector.Count().ToString());
-            //List<string> blockNameList = new List<string>();
-            //List<Element> blockElement = new List<Element>();
-            //foreach (ImportInstance inst in CADcollector)
-            //{
-            //    ElementId typeId = inst.GetTypeId();
-            //    string tempName = doc.GetElement(typeId).Name;
-            //    if (!blockNameList.Contains(tempName))
-            //    {
-            //        blockNameList.Add(tempName);
-            //        blockElement.Add(doc.GetElement(typeId));
-            //    }
-            //}
-            //ui.Dispatcher.Invoke(() =>ui.BlockListBox.ItemsSource = blockElement);
-            #endregion
+            Level activeLevel = doc.ActiveView.GenLevel;
             List<CAD> cadList = new List<CAD>();
             int count = 0;
             foreach (CAD cad in ui.BlockListBox.Items)
@@ -74,6 +54,11 @@ namespace CEC_CADBlockTrans
                     cadList.Add(cad);
                 }
             }
+            //先確認UI上的刪除checkBox是否有被選取
+            bool deleteBlockIsChecked = false;
+            ui.Dispatcher.Invoke(() => deleteBlockIsChecked = ui.deleteCheckBox.IsChecked.GetValueOrDefault());
+
+
             //ui.Dispatcher.Invoke(() => count = ui.BlockListBox.SelectedItems.Count);
             //MessageBox.Show($"BlockListBox 中共有 {count} 個物件被選取");
             ui.Dispatcher.Invoke(() => ui.pbar.Value = 0);
@@ -102,9 +87,11 @@ namespace CEC_CADBlockTrans
             #region 新作法
             //新作法嘗試，先蒐集所有的ImportInst
             int completeNum = 0;
+            List<ElementType> selectTypes = new List<ElementType>();
             foreach (CAD cad in cadList)
             {
                 ElementType elemType = doc.GetElement(cad.Id) as ElementType;
+                selectTypes.Add(elemType);
                 List<ImportInstance> tempList = new importedCAD().instanceOfType(doc, elemType);
                 ui.Dispatcher.Invoke(() => Method.cadBlockCount(ui, doc, elemType));
                 if (tempList.Count() > 0)
@@ -117,9 +104,12 @@ namespace CEC_CADBlockTrans
             }
             ui.Dispatcher.Invoke(() => ui.pbar.Value = 0);
             ui.Dispatcher.Invoke(() => ui.pbar.Maximum = targetList.Count);
-            using (TransactionGroup transGroup = new TransactionGroup(doc))
+            //using (TransactionGroup transGroup = new TransactionGroup(doc))
+            //{
+            //    transGroup.Start("圖塊批次放置");
+            using (Transaction trans = new Transaction(doc))
             {
-                transGroup.Start("圖塊批次放置");
+                trans.Start("圖塊批次放置轉換");
                 foreach (ImportInstance inst in targetList)
                 {
                     //如果有成功創造
@@ -132,8 +122,18 @@ namespace CEC_CADBlockTrans
                     //ui.pbar.Dispatcher.Invoke(() => ui.pbar.Value += 1, System.Windows.Threading.DispatcherPriority.Background);
                     #endregion
                 }
-                transGroup.Assimilate();
+                if (deleteBlockIsChecked)
+                {
+                    foreach(ElementType type in selectTypes)
+                    {
+                        Method.deleteBlock(ui, doc, type, activeLevel);
+                    }
+                }
+                trans.Commit();
             }
+
+            //    transGroup.Assimilate();
+            //}
             FamilySymbol selectedSymbol = ui.symbolComboBox.SelectedItem as FamilySymbol;
             Task.Run(() =>
             {

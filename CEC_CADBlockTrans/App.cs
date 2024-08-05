@@ -59,11 +59,11 @@ namespace CEC_CADBlockTrans
             ImageSource imgSrc0 = GetImageSource(image_CreateST);
 
             PushButtonData btnData0 = new PushButtonData(
- "MyButton_CADBlockTrans",
- "圖塊\n   批次轉換   ",
- Assembly.GetExecutingAssembly().Location,
- "CEC_CADBlockTrans.Command"//按鈕的全名-->要依照需要參照的command打入
- );
+             "MyButton_CADBlockTrans",
+            "圖塊\n   批次轉換   ",
+             Assembly.GetExecutingAssembly().Location,
+            "CEC_CADBlockTrans.Command"//按鈕的全名-->要依照需要參照的command打入
+            );
             {
                 btnData0.ToolTip = "CAD圖塊批次轉換";
                 btnData0.LongDescription = "CAD圖塊批次轉換";
@@ -71,6 +71,9 @@ namespace CEC_CADBlockTrans
             };
 
             PushButton button0 = panel.AddItem(btnData0) as PushButton;
+            //button0.AvailabilityClassName = "CEC_CADBlockTrans.Availability";
+            //設定按鈕僅能在平面視圖中看到
+
 
             // listeners/watchers for external events (if you choose to use them)
             a.ApplicationClosing += a_ApplicationClosing; //Set Application to Idling
@@ -80,9 +83,11 @@ namespace CEC_CADBlockTrans
 
         public Result OnShutdown(UIControlledApplication a)
         {
+            //次數記錄後儲存
+            ExcelLog log = new ExcelLog(Counter.count);
+            log.userLog();
             return Result.Succeeded;
         }
-       
 
         private BitmapSource GetImageSource(Image img)
         {
@@ -107,7 +112,6 @@ namespace CEC_CADBlockTrans
         void a_Idling(object sender, IdlingEventArgs e)
         {
         }
-
         /// <summary>
         /// What to do when the application is closing.)
         /// </summary>

@@ -232,7 +232,11 @@ namespace CEC_CADBlockTrans
                 }
             }
             //蒐集UI上的資訊
-            DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
+#if RELEASE2019
+       DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
+#else
+            ForgeTypeId unitType = UnitTypeId.Millimeters;
+#endif
             FamilySymbol selectedSymbol = ui.symbolComboBox.SelectedItem as FamilySymbol;
             string offsetText = ui.offsetBox.Text;
             double offsetValue = Convert.ToDouble(offsetText);
@@ -275,8 +279,13 @@ namespace CEC_CADBlockTrans
             Level activeLevel = activeView.GenLevel;
             //string instName = CADType.Name;
             //蒐集UI上的資訊
-            DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
+#if RELEASE2019
+       DisplayUnitType unitType = DisplayUnitType.DUT_MILLIMETERS;
+#else
+            ForgeTypeId unitType = UnitTypeId.Millimeters;
+#endif
             FamilySymbol selectedSymbol = ui.symbolComboBox.SelectedItem as FamilySymbol;
+            selectedSymbol.Activate();
             try
             {
                 string offsetText = ui.offsetBox.Text;
@@ -287,39 +296,54 @@ namespace CEC_CADBlockTrans
                 FamilyInstance inst = null;
                 if (selectedSymbol != null && offsetValue != null)
                 {
-                    using (Transaction trans = new Transaction(doc))
+                    //using (Transaction trans = new Transaction(doc))
+                    //{
+                    //    trans.Start("圖塊批次放置");
+                    Transform t = cadInst.GetTotalTransform();
+                    XYZ tX = t.get_Basis(0);
+                    XYZ cadOrigin = t.Origin;
+                    XYZ finalPt = new XYZ(cadOrigin.X, cadOrigin.Y, cadOrigin.Z + valueToSet);
+                    if (!instanceExist(doc, selectedSymbol, finalPt))
                     {
-                        trans.Start("圖塊批次放置");
-                        Transform t = cadInst.GetTotalTransform();
-                        XYZ cadOrigin = t.Origin;
-                        XYZ finalPt = new XYZ(cadOrigin.X, cadOrigin.Y, cadOrigin.Z + valueToSet);
-                        if (!instanceExist(doc, selectedSymbol, finalPt))
+                        inst = doc.Create.NewFamilyInstance(cadOrigin, selectedSymbol, activeLevel, StructuralType.NonStructural);
+                        #region 針對元件進行旋轉
+                        Transform instTrans = inst.GetTotalTransform();
+                        XYZ instTransX = instTrans.get_Basis(0);
+                        double angle = instTransX.AngleTo(tX);
+                        LocationPoint instPt = inst.Location as LocationPoint;
+                        XYZ tempPt = new XYZ(cadOrigin.X,cadOrigin.Y,cadOrigin.Z+1);
+                        //XYZ tempPt2 = new XYZ(tempPt.X, tempPt.Y, tempPt.Z+1);
+                        Line axis = Line.CreateBound(cadOrigin,tempPt);
+                        instPt.Rotate(axis,angle);
+                        #endregion
+                        createNum += 1;
+#if RELEASE2019
+                        Parameter instOffset = inst.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM);
+#else
+                        Parameter instOffset = inst.get_Parameter(BuiltInParameter.INSTANCE_ELEVATION_PARAM);
+#endif
+                        instOffset.Set(valueToSet);
+                    }
+                    else
+                    {
+                        complete = false;
+                        Task.Run(() =>
                         {
-                            inst = doc.Create.NewFamilyInstance(cadOrigin, selectedSymbol, activeLevel, StructuralType.NonStructural);
-                            createNum += 1;
-                            Parameter instOffset = inst.LookupParameter("偏移");
-                            instOffset.Set(valueToSet);
-                        }
-                        else
-                        {
-                            complete = false;
-                            Task.Run(() =>
-                            {
-                                string existMessage = $"【錯誤】ID為 {cadInst.Id} 上已有偏移值為 {offsetText} mm 的 {selectedSymbol.FamilyName} - {selectedSymbol.Name} 元件，無法置換";
-                                ui.Dispatcher.Invoke(() =>
-        ui.outputBox.Text += "\n" + existMessage);
-                            });
-                        }
-                        trans.Commit();
-                        trans.Dispose();
+                            string existMessage = $"【重複放置】ID為 {cadInst.Id} 上已有偏移值為 {offsetText} mm 的 {selectedSymbol.FamilyName} - {selectedSymbol.Name} 元件，無法置換";
+                            ui.Dispatcher.Invoke(() =>
+    ui.outputBox.Text += "\n" + existMessage);
+                        });
+                        //}
+                        //trans.Commit();
+                        //trans.Dispose();
                     }
                 }
                 //Task.Run(() =>
                 //{
-                    //ui.Dispatcher.Invoke(() => ui.pbar.Value += 1);
-                    //    string message = $"{DateTime.Now} \n「共創造了「{createNum} 」個「{selectedSymbol.Name}」元件";
-                    //    ui.Dispatcher.Invoke(() =>
-                    //        ui.outputBox.Text += "\n" + message);
+                //ui.Dispatcher.Invoke(() => ui.pbar.Value += 1);
+                //    string message = $"{DateTime.Now} \n「共創造了「{createNum} 」個「{selectedSymbol.Name}」元件";
+                //    ui.Dispatcher.Invoke(() =>
+                //        ui.outputBox.Text += "\n" + message);
                 //});
             }
             catch
@@ -333,6 +357,38 @@ namespace CEC_CADBlockTrans
                 });
             }
             return complete;
+        }
+
+        public static void deleteBlock(UI ui, Document doc, ElementType CADType, Level referLevel)
+        {
+            int deletNum = 0;
+            //先根據UI的內容蒐集要轉換的block
+            List<Element> selectedBlocks = new List<Element>();
+            View activeView = doc.ActiveView;
+            Level activeLevel = activeView.GenLevel;
+            string instName = CADType.Name;
+            ElementLevelFilter levelFilter = new ElementLevelFilter(activeLevel.Id);
+            FilteredElementCollector cadImportInst = new FilteredElementCollector(doc).OfClass(typeof(ImportInstance)).WherePasses(levelFilter).WhereElementIsNotElementType();
+            foreach (Element temp in cadImportInst)
+            {
+                ElementType tempType = doc.GetElement(temp.GetTypeId()) as ElementType;
+                if (tempType.Name == instName)
+                {
+                    selectedBlocks.Add(temp);
+                }
+            }
+            foreach (Element e in selectedBlocks)
+            {
+                doc.Delete(e.Id);
+                deletNum += 1;
+            }
+            Task.Run(() =>
+            {
+                string outputMessage = $"【圖塊刪除】共刪除了 {deletNum} 個 {CADType.Name} 圖塊元件";
+                ui.Dispatcher.Invoke(() =>
+                    ui.outputBox.Text += "\n" + outputMessage);
+            });
+
         }
 
         public static bool instanceExist(Document document, FamilySymbol symbol, XYZ point)
@@ -501,10 +557,8 @@ namespace CEC_CADBlockTrans
                 bitmapimage.StreamSource = memory;
                 bitmapimage.CacheOption = BitmapCacheOption.OnLoad;
                 bitmapimage.EndInit();
-
             }
             return bitmapimage;
         }
     }
 }
-
